@@ -18,8 +18,8 @@ UPDATE_EVERY = 4        # how often to update the network
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-USE_DOUBLE_DQN = False
-USE_PRIORITIZED_REPLAY_BUFFER = True
+USE_DOUBLE_DQN = True
+USE_PRIORITIZED_REPLAY_BUFFER = False
 USE_DUELING_NETWORK = True
 
 class Agent():
@@ -205,7 +205,7 @@ class ReplayBuffer:
         next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
         dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
   
-        return (states, actions, rewards, next_states, dones)
+        return (states, actions, rewards, next_states, dones, None)
 
     def __len__(self):
         """Return the current size of internal memory."""
