@@ -9,13 +9,15 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 BUFFER_SIZE = int(1e5)  # replay buffer size
-BATCH_SIZE = 64         # minibatch size
+BATCH_SIZE = 32         # minibatch size
 GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
 LR = 5e-4               # learning rate 
 UPDATE_EVERY = 4        # how often to update the network
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+USE_DOUBLE_DQN = True
 
 class Agent():
     """Interacts with and learns from the environment."""
@@ -35,10 +37,10 @@ class Agent():
 
         # Q-Network
         self.qnetwork_local = QNetwork(state_size, action_size, 
-                                        seed, fc1_units= 128, fc2_units=128).to(device)
-                                        
+                                        seed, fc1_units= 128, fc2_units=32).to(device)
+
         self.qnetwork_target = QNetwork(state_size, action_size, 
-                                        seed, fc1_units= 128, fc2_units=128).to(device)
+                                        seed, fc1_units= 128, fc2_units=32).to(device)
 
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
 
@@ -89,11 +91,22 @@ class Agent():
         """
         states, actions, rewards, next_states, dones = experiences
 
-        # Get max predicted Q values (for next states) from target model
-        Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
-        
-        # Compute Q targets for current states 
-        Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
+        if USE_DOUBLE_DQN:
+            self.qnetwork_local.eval()
+            Q_local = self.qnetwork_local(next_states)
+            greedy_actions = torch.argmax(Q_local, axis=1).unsqueeze(1)
+            self.qnetwork_local.train()
+
+            Q_targets_next = self.qnetwork_target(next_states)
+            Q_targets_next = Q_targets_next.gather(1, greedy_actions)
+            Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
+
+        else:
+            # Get max predicted Q values (for next states) from target model
+            Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
+            
+            # Compute Q targets for current states 
+            Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
 
         # Get expected Q values from local model
         Q_expected = self.qnetwork_local(states).gather(1, actions)
