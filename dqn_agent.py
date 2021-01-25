@@ -41,10 +41,10 @@ class Agent():
         # Q-Network
         if USE_DUELING_NETWORK:
             self.qnetwork_local = DuelingQNetwork(state_size, action_size, seed, 
-                                                [128, 32]).to(device)
+                                                [128, 32], [64, 32]).to(device)
 
             self.qnetwork_target = DuelingQNetwork(state_size, action_size, seed, 
-                                                [128, 32]).to(device)
+                                                [128, 32], [64, 32]).to(device)
             self.qnetwork_target.eval()
             
         else:
@@ -63,7 +63,7 @@ class Agent():
             self.memory = PrioritizedReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed, device, 
                             alpha=0.6, beta=0.4, beta_scheduler=1.0)
         else:
-            self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed, device)
+            self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed)
 
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
@@ -297,7 +297,7 @@ class PrioritizedReplayBuffer:
         np.power(self.w, -self.beta, out=self.w, where=self.w!=0) # condition to avoid division by zero
         np.divide(self.w, self.w.max(), out=self.w) # normalize the weights
         self.beta = min(1, self.beta*self.beta_scheduler)
-        
+
         # Split data into new variables
         states = torch.from_numpy(np.vstack(self.memory_samples['state'])).float().to(self.device)
         actions = torch.from_numpy(np.vstack(self.memory_samples['action'])).long().to(self.device)

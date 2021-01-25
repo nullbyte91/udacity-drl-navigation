@@ -30,7 +30,7 @@ print('States look like:', state)
 state_size = len(state)
 print('States have length:', state_size)
 
-agent = Agent(state_size=state_size, action_size=action_size, seed=0)
+agent = Agent(state_size=state_size, action_size=action_size, seed=0, lr_decay=0.9999)
 
 ## Define the training function
 def dqn(n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.995):
@@ -75,7 +75,7 @@ def dqn(n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.99
 
 
 ## Train the Agent
-scores = dqn()
+scores = dqn(n_episodes=300, max_t=400, eps_start=0.10, eps_end=0.01, eps_decay=0.987)
 
 ## Plot the scores
 fig = plt.figure()
