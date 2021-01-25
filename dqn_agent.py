@@ -7,6 +7,7 @@ from model import QNetwork
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from dueling_model import DuelingQNetwork
 
 BUFFER_SIZE = int(1e5)  # replay buffer size
 BATCH_SIZE = 64         # minibatch size
@@ -19,11 +20,12 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 USE_DOUBLE_DQN = False
 USE_PRIORITIZED_REPLAY_BUFFER = True
+USE_DUELING_NETWORK = True
 
 class Agent():
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, seed):
+    def __init__(self, state_size, action_size, seed, lr_decay=0.9999):
         """Initialize an Agent object.
         
         Params
@@ -37,17 +39,29 @@ class Agent():
         self.seed = random.seed(seed)
 
         # Q-Network
-        self.qnetwork_local = QNetwork(state_size, action_size, 
-                                        seed, fc1_units= 128, fc2_units=32).to(device)
+        if USE_DUELING_NETWORK:
+            self.qnetwork_local = DuelingQNetwork(state_size, action_size, seed, 
+                                                [128, 32]).to(device)
 
-        self.qnetwork_target = QNetwork(state_size, action_size, 
-                                        seed, fc1_units= 128, fc2_units=32).to(device)
+            self.qnetwork_target = DuelingQNetwork(state_size, action_size, seed, 
+                                                [128, 32]).to(device)
+            self.qnetwork_target.eval()
+            
+        else:
+            self.qnetwork_local = QNetwork(state_size, action_size, 
+                                            seed, fc1_units= 128, fc2_units=32).to(device)
 
+            self.qnetwork_target = QNetwork(state_size, action_size, 
+                                            seed, fc1_units= 128, fc2_units=32).to(device)
+            self.qnetwork_target.eval()
+            
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
+        self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, lr_decay)
 
         # Replay memory
         if USE_PRIORITIZED_REPLAY_BUFFER:
-            self.memory = PrioritizedReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed, device, alpha=0.6, beta=0.4)
+            self.memory = PrioritizedReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed, device, 
+                            alpha=0.6, beta=0.4, beta_scheduler=1.0)
         else:
             self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed, device)
 
@@ -138,6 +152,7 @@ class Agent():
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        self.lr_scheduler.step()
 
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)                     
@@ -199,7 +214,7 @@ class ReplayBuffer:
 class PrioritizedReplayBuffer:
     """Fixed-size prioritized buffer to store experience tuples."""
     
-    def __init__(self, action_size, buffer_size, batch_size, seed, device, alpha=0., beta=1.):
+    def __init__(self, action_size, buffer_size, batch_size, seed, device, alpha=0., beta=1., beta_scheduler=1.0):
         """Initialize a PrioritizedReplayBuffer object.
 
         Params
@@ -219,7 +234,8 @@ class PrioritizedReplayBuffer:
         self.device = device
         self.alpha = alpha
         self.beta = beta
-        
+        self.beta_scheduler = beta_scheduler
+
         # Create a Numpy Array to store tuples of experience
         self.memory = np.empty(buffer_size, dtype=[
             ("state", np.ndarray),
@@ -280,6 +296,7 @@ class PrioritizedReplayBuffer:
         np.multiply(self.memory['prob'], self.buffer_size, out=self.w)
         np.power(self.w, -self.beta, out=self.w, where=self.w!=0) # condition to avoid division by zero
         np.divide(self.w, self.w.max(), out=self.w) # normalize the weights
+        self.beta = min(1, self.beta*self.beta_scheduler)
         
         # Split data into new variables
         states = torch.from_numpy(np.vstack(self.memory_samples['state'])).float().to(self.device)
